@@ -1,11 +1,12 @@
 import os
 import shutil
+import joblib
 import nltk
+import tkinter as tk
+from tkinter import filedialog
 from nltk.corpus import stopwords
 from sklearn.feature_extraction.text import CountVectorizer
-from sklearn.model_selection import train_test_split
 from sklearn.naive_bayes import MultinomialNB
-from pathlib import Path
 from filetype import guess
 
 nltk.download('stopwords')
@@ -13,85 +14,94 @@ nltk.download('stopwords')
 # Get the list of stopwords
 stopwords = set(stopwords.words('english'))
 
-# This is the path to the directories with your training files
-work_dir = os.path.expanduser("~/Desktop/Work")
-personal_dir = os.path.expanduser("~/Desktop/Personal")
-
-# Get the list of all files in each directory
-work_files = os.listdir(work_dir)
-personal_files = os.listdir(personal_dir)
-
-# Create lists to store the file contents and their labels
-texts = []
-labels = []
-
-# Load the work files
-for file in work_files:
-    with open(os.path.join(work_dir, file), 'r') as f:
-        texts.append(f.read())
-        labels.append('Work')
-
-# Load the personal files
-for file in personal_files:
-    with open(os.path.join(personal_dir, file), 'r') as f:
-        texts.append(f.read())
-        labels.append('Personal')
-
 # Create the CountVectorizer
 vectorizer = CountVectorizer(stop_words=stopwords)
 
-# Convert the texts into feature vectors
-X = vectorizer.fit_transform(texts)
+# Create the GUI
+root = tk.Tk()
 
-# Split the data into training and testing sets
-X_train, X_test, y_train, y_test = train_test_split(X, labels, test_size=0.2, random_state=42)
+# Create the model variable
+model = tk.StringVar()
 
-# Train the model
-model = MultinomialNB().fit(X_train, y_train)
-
-# Test the model
-print("Model Accuracy: ", model.score(X_test, y_test))
-
-# Now you can use the model to organize other text files on your desktop
-path = os.path.expanduser("~/Desktop")
-files = os.listdir(path)
-
-for file in files:
-    filepath = os.path.join(path, file)
+def train_model():
+    # Ask the user to select a directory
+    dir_path = filedialog.askdirectory()
     
-    # Check if the file is a text file
-    kind = guess(filepath)
+    # Get the list of all subdirectories
+    subdirs = [d for d in os.listdir(dir_path) if os.path.isdir(os.path.join(dir_path, d))]
     
-    if kind is None:
-        print(f"Cannot guess file type for {file}!")
-        continue
+    # Create lists to store the file contents and their labels
+    texts = []
+    labels = []
+    
+    # Load the files
+    for subdir in subdirs:
+        files = os.listdir(os.path.join(dir_path, subdir))
+        for file in files:
+            with open(os.path.join(dir_path, subdir, file), 'r') as f:
+                texts.append(f.read())
+                labels.append(subdir)
+    
+    # Convert the texts into feature vectors
+    X = vectorizer.fit_transform(texts)
+    
+    # Train the model
+    model.set(MultinomialNB().fit(X, labels))
+    
+    # Save the model to a file
+    joblib.dump(model.get(), 'model.joblib')
 
-    if "text" in kind.mime:
-        with open(filepath, 'r') as f:
-            text = f.read()
-            features = vectorizer.transform([text])
-            label = model.predict(features)
-            
-            # Create the directory if it doesn't already exist
-            new_dir = os.path.join(path, label[0])
-            if not os.path.exists(new_dir):
-                os.mkdir(new_dir)
-            
-            # Move the file
-            shutil.move(filepath, new_dir)
-    elif "application" in kind.mime:
-        # Move applications to a separate directory
-        app_dir = os.path.join(path, "Applications")
-        if not os.path.exists(app_dir):
-            os.mkdir(app_dir)
+def classify_files():
+    # Check if a model is loaded
+    if model.get() == '':
+        print("No model loaded!")
+        return
+    
+    # Ask the user to select a directory
+    dir_path = filedialog.askdirectory()
+    
+    # Get the list of all files in the directory
+    files = os.listdir(dir_path)
+    
+    for file in files:
+        filepath = os.path.join(dir_path, file)
         
-        # Move the file
-        shutil.move(filepath, app_dir)
-    else:
-        # Move other files to a separate directory
-        other_dir = os.path.join(path, "Other")
-        if not os.path.exists(other_dir):
-            os.mkdir(other_dir)
+        # Check if the file is a text file
+        kind = guess(filepath)
         
-        # Move the file
-        shutil.move(filepath, other_dir)
+        if kind is None:
+            print(f"Cannot guess file type for {file}!")
+            continue
+
+        if "text" in kind.mime:
+            with open(filepath, 'r') as f:
+                text = f.read()
+                features = vectorizer.transform([text])
+                label = model.get().predict(features)
+                
+                # Create the directory if it doesn't already exist
+                new_dir = os.path.join(dir_path, label[0])
+                if not os.path.exists(new_dir):
+                    os.mkdir(new_dir)
+                
+                # Move the file
+                shutil.move(filepath, new_dir)
+
+def load_model():
+    # Ask the user to select a file
+    file_path = filedialog.askopenfilename()
+    
+    # Load the model from the file
+    model.set(joblib.load(file_path))
+
+# Create the buttons
+train_button = tk.Button(root, text="Train a New Model", command=train_model)
+classify_button = tk.Button(root, text="Classify Files", command=classify_files)
+load_button = tk.Button(root, text="Load a Model", command=load_model)
+
+train_button.pack()
+classify_button.pack()
+load_button.pack()
+
+# Start the GUI
+root.mainloop()

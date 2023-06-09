@@ -1,0 +1,5 @@
+nltk==3.5
+scikit-learn==0.24.2
+joblib==1.0.1
+python-magic==0.4.22
+tkinter==8.6

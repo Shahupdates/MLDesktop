@@ -5,6 +5,8 @@ from nltk.corpus import stopwords
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.model_selection import train_test_split
 from sklearn.naive_bayes import MultinomialNB
+from pathlib import Path
+from filetype import guess
 
 nltk.download('stopwords')
 
@@ -55,15 +57,41 @@ path = os.path.expanduser("~/Desktop")
 files = os.listdir(path)
 
 for file in files:
-    with open(os.path.join(path, file), 'r') as f:
-        text = f.read()
-        features = vectorizer.transform([text])
-        label = model.predict(features)
-        
-        # Create the directory if it doesn't already exist
-        new_dir = os.path.join(path, label[0])
-        if not os.path.exists(new_dir):
-            os.mkdir(new_dir)
+    filepath = os.path.join(path, file)
+    
+    # Check if the file is a text file
+    kind = guess(filepath)
+    
+    if kind is None:
+        print(f"Cannot guess file type for {file}!")
+        continue
+
+    if "text" in kind.mime:
+        with open(filepath, 'r') as f:
+            text = f.read()
+            features = vectorizer.transform([text])
+            label = model.predict(features)
+            
+            # Create the directory if it doesn't already exist
+            new_dir = os.path.join(path, label[0])
+            if not os.path.exists(new_dir):
+                os.mkdir(new_dir)
+            
+            # Move the file
+            shutil.move(filepath, new_dir)
+    elif "application" in kind.mime:
+        # Move applications to a separate directory
+        app_dir = os.path.join(path, "Applications")
+        if not os.path.exists(app_dir):
+            os.mkdir(app_dir)
         
         # Move the file
-        shutil.move(os.path.join(path, file), new_dir)
+        shutil.move(filepath, app_dir)
+    else:
+        # Move other files to a separate directory
+        other_dir = os.path.join(path, "Other")
+        if not os.path.exists(other_dir):
+            os.mkdir(other_dir)
+        
+        # Move the file
+        shutil.move(filepath, other_dir)
